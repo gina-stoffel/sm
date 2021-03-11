@@ -17,6 +17,7 @@
 // Special target platform header, set by configure script
 #include TARGET_PLATFORM_HEADER
 
+#define ENCL_MAX  16
 #define ATTEST_DATA_MAXLEN  1024
 #define ENCLAVE_REGIONS_MAX 8
 /* TODO: does not support multithreaded enclave yet */
@@ -58,6 +59,33 @@ struct enclave_region
   enum enclave_region_type type;
 };
 
+/* Enclave policy 
+ * Each enclave can register a policy of
+ * how many instructions/cycles it wants
+ * to run in an epoch
+ */
+struct enclave_policy
+{
+  uint64_t want_instr_per_epoch;
+  uint64_t want_cycles_per_epoch;
+};
+
+/* Enclave policy counter
+ * Tracking the instruction and
+ * cycles that an enclave was able to
+ * run during an epochenclave_policies
+ */
+struct enclave_policy_counter
+{
+  uint64_t instr_count; // stores the most recent CSR value of when the enclave was run/resumed
+  uint64_t cycle_count;
+  uint64_t instr_run_tot; // the sum of instructions that were run
+  uint64_t cycles_run_tot;
+};
+
+/* enclave_policy holds information about the instructions/cycles run by each enclave */
+extern struct enclave_policy_counter enclave_policies[ENCL_MAX];
+
 /* enclave metadata */
 struct enclave
 {
@@ -82,6 +110,9 @@ struct enclave
   struct thread_state threads[MAX_ENCL_THREADS];
 
   struct platform_enclave_data ped;
+
+  /* the enclaves policy */
+  struct enclave_policy policy;
 };
 
 /* attestation reports */

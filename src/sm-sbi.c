@@ -35,6 +35,10 @@ unsigned long sbi_sm_destroy_enclave(unsigned long eid)
 
 unsigned long sbi_sm_run_enclave(struct sbi_trap_regs *regs, unsigned long eid)
 {
+  /* update policy counter by reading from CSR mcycle/minstret */
+  enclave_policies[eid].instr_count = (uint64_t)csr_read(minstret);
+  enclave_policies[eid].cycle_count = (uint64_t)csr_read(mcycle);
+
   regs->a0 = run_enclave(regs, (unsigned int) eid);
   regs->mepc += 4;
   sbi_trap_exit(regs);
@@ -43,6 +47,10 @@ unsigned long sbi_sm_run_enclave(struct sbi_trap_regs *regs, unsigned long eid)
 
 unsigned long sbi_sm_resume_enclave(struct sbi_trap_regs *regs, unsigned long eid)
 {
+  /* update policy counter by reading from CSR mcycle/minstret */
+  enclave_policies[eid].instr_count = (uint64_t)csr_read(minstret);
+  enclave_policies[eid].cycle_count = (uint64_t)csr_read(mcycle);
+
   unsigned long ret;
   ret = resume_enclave(regs, (unsigned int) eid);
   if (!regs->zero)
@@ -55,7 +63,13 @@ unsigned long sbi_sm_resume_enclave(struct sbi_trap_regs *regs, unsigned long ei
 
 unsigned long sbi_sm_exit_enclave(struct sbi_trap_regs *regs, unsigned long retval)
 {
-  regs->a0 = exit_enclave(regs, cpu_get_enclave_id());
+    /* calculate policy counter */
+  int eid = cpu_get_enclave_id();
+  enclave_policies[eid].instr_run_tot = enclave_policies[eid].instr_run_tot + ((uint64_t)csr_read(minstret) - enclave_policies[eid].instr_count);
+  enclave_policies[eid].cycles_run_tot = enclave_policies[eid].cycles_run_tot + ((uint64_t)csr_read(mcycle) - enclave_policies[eid].cycle_count);
+  sbi_printf("EID: %5d, %10s %10lu, %10s %10lu\n", eid, "instr_run_total:", enclave_policies[eid].instr_run_tot, "cycles_run_total:", enclave_policies[eid].cycles_run_tot);
+
+  regs->a0 = exit_enclave(regs, eid);
   regs->a1 = retval;
   regs->mepc += 4;
   sbi_trap_exit(regs);
@@ -64,7 +78,13 @@ unsigned long sbi_sm_exit_enclave(struct sbi_trap_regs *regs, unsigned long retv
 
 unsigned long sbi_sm_stop_enclave(struct sbi_trap_regs *regs, unsigned long request)
 {
-  regs->a0 = stop_enclave(regs, request, cpu_get_enclave_id());
+  /* calculate policy counter */
+  int eid = cpu_get_enclave_id();
+  enclave_policies[eid].instr_run_tot = enclave_policies[eid].instr_run_tot + ((uint64_t)csr_read(minstret) - enclave_policies[eid].instr_count);
+  enclave_policies[eid].cycles_run_tot = enclave_policies[eid].cycles_run_tot + ((uint64_t)csr_read(mcycle) - enclave_policies[eid].cycle_count);
+  sbi_printf("EID: %5d, %10s %10lu, %10s %10lu\n", eid, "instr_run_total:", enclave_policies[eid].instr_run_tot, "cycles_run_total:", enclave_policies[eid].cycles_run_tot);
+
+  regs->a0 = stop_enclave(regs, request, eid);
   regs->mepc += 4;
   sbi_trap_exit(regs);
   return 0;

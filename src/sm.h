@@ -108,6 +108,10 @@ struct keystone_sbi_create
 
   struct runtime_va_params_t params;
   unsigned int* eid_pptr;
+
+  /* define optional policy */
+  uint64_t instr_per_epoch;
+  uint64_t cycles_per_epoch;
 };
 
 int osm_pmp_set(uint8_t perm);

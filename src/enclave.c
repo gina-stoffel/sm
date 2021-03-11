@@ -13,8 +13,6 @@
 #include <sbi/riscv_locks.h>
 #include <sbi/sbi_console.h>
 
-#define ENCL_MAX  16
-
 struct enclave enclaves[ENCL_MAX];
 #define ENCLAVE_EXISTS(eid) (eid >= 0 && eid < ENCL_MAX && enclaves[eid].state >= 0)
 
@@ -23,6 +21,9 @@ static spinlock_t encl_lock = SPIN_LOCK_INITIALIZER;
 extern void save_host_regs(void);
 extern void restore_host_regs(void);
 extern byte dev_public_key[PUBLIC_KEY_SIZE];
+
+/* enclave_policy holds information about the instructions/cycles run by each enclave */
+struct enclave_policy_counter enclave_policies[ENCL_MAX];
 
 /****************************
  *
@@ -87,6 +88,10 @@ static inline void context_switch_to_enclave(struct sbi_trap_regs* regs,
   // Setup any platform specific defenses
   platform_switch_to_enclave(&(enclaves[eid]));
   cpu_enter_enclave_context(eid);
+
+  /* update policy counter by reading from CSR mcycle/minstret */
+  // enclave_policies[eid].instr_count = (uint64_t)csr_read(minstret);
+  // enclave_policies[eid].cycle_count = (uint64_t)csr_read(mcycle);
 }
 
 static inline void context_switch_to_host(struct sbi_trap_regs *regs,
@@ -135,6 +140,16 @@ static inline void context_switch_to_host(struct sbi_trap_regs *regs,
   return;
 }
 
+/* Internal function used to validate and detect policy violations
+ * of an enclave.
+ */
+static inline int enclave_detect_policy_violation(enclave_id eid){
+  return 0; // 0: false, 1: true
+}
+
+static inline int enclave_validate_policy(uint64_t* instr_per_epoch, uint64_t* cycles_per_epoch){
+  return 1;
+}
 
 // TODO: This function is externally used.
 // refactoring needed
@@ -360,6 +375,9 @@ unsigned long create_enclave(unsigned long *eidptr, struct keystone_sbi_create c
   pa_params.user_base = create_args.user_paddr;
   pa_params.free_base = create_args.free_paddr;
 
+  /* set policy params*/
+  uint64_t want_instr_per_epoch = create_args.instr_per_epoch;
+  uint64_t want_cycles_per_epoch = create_args.cycles_per_epoch;
 
   // allocate eid
   ret = SBI_ERR_SM_ENCLAVE_NO_FREE_RESOURCE;
@@ -398,6 +416,22 @@ unsigned long create_enclave(unsigned long *eidptr, struct keystone_sbi_create c
   enclaves[eid].n_thread = 0;
   enclaves[eid].params = params;
   enclaves[eid].pa_params = pa_params;
+
+   /* check if a policy is set
+   * if so, verify that the policy can be fulfilled
+   * TODO: verify all policies first
+   */
+
+  if(enclave_validate_policy(&want_instr_per_epoch, &want_cycles_per_epoch)){
+    enclaves[eid].policy.want_instr_per_epoch = want_instr_per_epoch;
+    enclaves[eid].policy.want_cycles_per_epoch = want_cycles_per_epoch;
+
+    /* set counter */
+    enclave_policies[eid].instr_count = 0;
+    enclave_policies[eid].cycle_count = 0;
+    enclave_policies[eid].instr_run_tot = 0;
+    enclave_policies[eid].cycles_run_tot = 0;
+  }
 
   /* Init enclave state (regs etc) */
   clean_state(&enclaves[eid].threads[0]);
