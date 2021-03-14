@@ -36,8 +36,8 @@ unsigned long sbi_sm_destroy_enclave(unsigned long eid)
 unsigned long sbi_sm_run_enclave(struct sbi_trap_regs *regs, unsigned long eid)
 {
   /* update policy counter by reading from CSR mcycle/minstret */
-  enclave_policies[eid].instr_count = (uint64_t)csr_read(minstret);
-  enclave_policies[eid].cycle_count = (uint64_t)csr_read(mcycle);
+  // enclave_policies[eid].instr_count = (uint64_t)csr_read(minstret);
+  // enclave_policies[eid].cycle_count = (uint64_t)csr_read(mcycle);
 
   regs->a0 = run_enclave(regs, (unsigned int) eid);
   regs->mepc += 4;
@@ -48,8 +48,8 @@ unsigned long sbi_sm_run_enclave(struct sbi_trap_regs *regs, unsigned long eid)
 unsigned long sbi_sm_resume_enclave(struct sbi_trap_regs *regs, unsigned long eid)
 {
   /* update policy counter by reading from CSR mcycle/minstret */
-  enclave_policies[eid].instr_count = (uint64_t)csr_read(minstret);
-  enclave_policies[eid].cycle_count = (uint64_t)csr_read(mcycle);
+  // enclave_policies[eid].instr_count = (uint64_t)csr_read(minstret);
+  // enclave_policies[eid].cycle_count = (uint64_t)csr_read(mcycle);
 
   unsigned long ret;
   ret = resume_enclave(regs, (unsigned int) eid);
