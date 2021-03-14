@@ -90,8 +90,8 @@ static inline void context_switch_to_enclave(struct sbi_trap_regs* regs,
   cpu_enter_enclave_context(eid);
 
   /* update policy counter by reading from CSR mcycle/minstret */
-  // enclave_policies[eid].instr_count = (uint64_t)csr_read(minstret);
-  // enclave_policies[eid].cycle_count = (uint64_t)csr_read(mcycle);
+  enclave_policies[eid].instr_count = (uint64_t)csr_read(minstret);
+  enclave_policies[eid].cycle_count = (uint64_t)csr_read(mcycle);
 }
 
 static inline void context_switch_to_host(struct sbi_trap_regs *regs,
@@ -334,6 +334,8 @@ static int is_create_args_valid(struct keystone_sbi_create* args)
   if (args->user_paddr > args->free_paddr)
     return 0;
 
+  /* TODO: validate policy */
+
   return 1;
 }
 
@@ -378,6 +380,7 @@ unsigned long create_enclave(unsigned long *eidptr, struct keystone_sbi_create c
   /* set policy params*/
   uint64_t want_instr_per_epoch = create_args.instr_per_epoch;
   uint64_t want_cycles_per_epoch = create_args.cycles_per_epoch;
+  sbi_printf("%20s %10lu \n%20s %10lu \n", "Want instructions:",want_instr_per_epoch, "Want cycles:", want_cycles_per_epoch);
 
   // allocate eid
   ret = SBI_ERR_SM_ENCLAVE_NO_FREE_RESOURCE;

@@ -67,7 +67,7 @@ unsigned long sbi_sm_exit_enclave(struct sbi_trap_regs *regs, unsigned long retv
   int eid = cpu_get_enclave_id();
   enclave_policies[eid].instr_run_tot = enclave_policies[eid].instr_run_tot + ((uint64_t)csr_read(minstret) - enclave_policies[eid].instr_count);
   enclave_policies[eid].cycles_run_tot = enclave_policies[eid].cycles_run_tot + ((uint64_t)csr_read(mcycle) - enclave_policies[eid].cycle_count);
-  sbi_printf("EID: %5d, %10s %10lu, %10s %10lu\n", eid, "instr_run_total:", enclave_policies[eid].instr_run_tot, "cycles_run_total:", enclave_policies[eid].cycles_run_tot);
+  sbi_printf("EID: %5x, %10s %10lu, %10s %10lu\n", eid, "instr_run_total:", enclave_policies[eid].instr_run_tot, "cycles_run_total:", enclave_policies[eid].cycles_run_tot);
 
   regs->a0 = exit_enclave(regs, eid);
   regs->a1 = retval;
