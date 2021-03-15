@@ -94,7 +94,7 @@ void sbi_trap_handler_keystone_enclave(struct sbi_trap_regs *regs)
 
 		/* sanity check */
 		uint64_t measurement_1 = csr_read(minstret); // lets try to use this as a fix point
-		uint64_t measurement_2 = csr_read(minstret);
+		// uint64_t measurement_2 = csr_read(minstret);
 		uint64_t measurement_c = csr_read(mcycle);
 		// sbi_printf("Sanity check: are these two instruction counts close? %10lu and %10lu\n", measurement_1, measurement_2);
 
