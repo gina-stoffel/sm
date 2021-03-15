@@ -66,8 +66,8 @@ struct enclave_region
  */
 struct enclave_policy
 {
-  uint64_t want_instr_per_epoch;
-  uint64_t want_cycles_per_epoch;
+  uint64_t instr_per_epoch;
+  uint64_t cycles_per_epoch;
 };
 
 /* Enclave policy counter
