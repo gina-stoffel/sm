@@ -425,9 +425,9 @@ unsigned long create_enclave(unsigned long *eidptr, struct keystone_sbi_create c
    * TODO: verify all policies first
    */
 
-  if(enclave_validate_policy(&want_instr_per_epoch, &want_cycles_per_epoch)){
-    enclaves[eid].policy.want_instr_per_epoch = want_instr_per_epoch;
-    enclaves[eid].policy.want_cycles_per_epoch = want_cycles_per_epoch;
+  if(enclave_validate_policy(&instr_per_epoch, &cycles_per_epoch)){
+    enclaves[eid].policy.instr_per_epoch = instr_per_epoch;
+    enclaves[eid].policy.cycles_per_epoch = cycles_per_epoch;
 
     /* set counter */
     enclave_policies[eid].instr_count = 0;
