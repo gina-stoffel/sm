@@ -378,9 +378,11 @@ unsigned long create_enclave(unsigned long *eidptr, struct keystone_sbi_create c
   pa_params.free_base = create_args.free_paddr;
 
   /* set policy params*/
-  uint64_t instr_per_epoch = create_args.instr_per_epoch;
-  uint64_t cycles_per_epoch = create_args.cycles_per_epoch;
-  // sbi_printf("%20s %10lu \n%20s %10lu \n", "Want instructions:",instr_per_epoch, "Want cycles:", cycles_per_epoch);
+  // uint64_t instr_per_epoch = create_args.instr_per_epoch;
+  // uint64_t cycles_per_epoch = create_args.cycles_per_epoch;
+  uint64_t instr_per_epoch = 0;
+  uint64_t cycles_per_epoch = 0;
+  // sbi_printf("%20s %10lu \n%20s %10lu \n", "Want instructions:",create_args.instr_per_epoch, "Want cycles:", create_args.cycles_per_epoch);
 
   // allocate eid
   ret = SBI_ERR_SM_ENCLAVE_NO_FREE_RESOURCE;

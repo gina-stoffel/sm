@@ -153,6 +153,8 @@ void sbi_trap_handler_keystone_enclave(struct sbi_trap_regs *regs)
 		break;
 	case CAUSE_SUPERVISOR_ECALL:
 	case CAUSE_MACHINE_ECALL:
+		sbi_printf("SM SBI: Trap cause: %8lu Trap info: %8lu Trap instr: %8lu \n", mcause, mtval, mtinst);
+
 		rc  = sbi_ecall_handler(regs);
 		msg = "ecall handler failed";
 		break;
