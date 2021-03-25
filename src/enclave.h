@@ -23,6 +23,9 @@
 /* TODO: does not support multithreaded enclave yet */
 #define MAX_ENCL_THREADS 1
 
+/* flag for trap recording */
+extern int enclave_is_running;
+
 typedef enum {
   INVALID = -1,
   DESTROYING = 0,

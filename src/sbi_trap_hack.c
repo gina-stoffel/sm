@@ -89,26 +89,6 @@ void sbi_trap_handler_keystone_enclave(struct sbi_trap_regs *regs)
 	ulong mtval = csr_read(CSR_MTVAL), mtval2 = 0, mtinst = 0;
 	struct sbi_trap_info trap;
 
-	/* take policy measurement */
-	if(cpu_is_enclave_context()) {
-
-		/* sanity check */
-		uint64_t measurement_1 = csr_read(minstret); // lets try to use this as a fix point
-		// uint64_t measurement_2 = csr_read(minstret);
-		uint64_t measurement_c = csr_read(mcycle);
-		// sbi_printf("Sanity check: are these two instruction counts close? %10lu and %10lu\n", measurement_1, measurement_2);
-
-		int eid = cpu_get_enclave_id();
-		/* calculate total instructions and cycles run so far*/
-		enclave_policies[eid].instr_run_tot = enclave_policies[eid].instr_run_tot + (measurement_1 - enclave_policies[eid].instr_count);
-		enclave_policies[eid].cycles_run_tot = enclave_policies[eid].cycles_run_tot + (measurement_c - enclave_policies[eid].cycle_count);
-		sbi_printf("EID: %5d, %10s %10lu, %10s %10lu\n", eid, "instr_run_total:", enclave_policies[eid].instr_run_tot, "cycles_run_total:", enclave_policies[eid].cycles_run_tot);
-	
-		/* update the current instruction/cycle count */
-		enclave_policies[eid].instr_count = measurement_1;
-		enclave_policies[eid].cycle_count = measurement_c;
-	}
-
 	if (misa_extension('H')) {
 		mtval2 = csr_read(CSR_MTVAL2);
 		mtinst = csr_read(CSR_MTINST);
@@ -153,7 +133,7 @@ void sbi_trap_handler_keystone_enclave(struct sbi_trap_regs *regs)
 		break;
 	case CAUSE_SUPERVISOR_ECALL:
 	case CAUSE_MACHINE_ECALL:
-		sbi_printf("SM SBI: Trap cause: %8lu Trap info: %8lu Trap instr: %8lu \n", mcause, mtval, mtinst);
+		//sbi_printf("SM SBI: Trap cause: %8lu Trap info: %8lu Trap instr: %8lu \n", mcause, mtval, mtinst);
 
 		rc  = sbi_ecall_handler(regs);
 		msg = "ecall handler failed";

@@ -16,11 +16,20 @@
 struct enclave enclaves[ENCL_MAX];
 #define ENCLAVE_EXISTS(eid) (eid >= 0 && eid < ENCL_MAX && enclaves[eid].state >= 0)
 
+/* set budget for policy */
+#define BUDGET_CYCLES 500000000
+uint64_t remaining_budget;
+
 static spinlock_t encl_lock = SPIN_LOCK_INITIALIZER;
 
 extern void save_host_regs(void);
 extern void restore_host_regs(void);
 extern byte dev_public_key[PUBLIC_KEY_SIZE];
+
+/* flag for trap recording */
+int enclave_is_running = 0;
+
+
 
 /* enclave_policy holds information about the instructions/cycles run by each enclave */
 struct enclave_policy_counter enclave_policies[ENCL_MAX];
@@ -92,6 +101,7 @@ static inline void context_switch_to_enclave(struct sbi_trap_regs* regs,
   /* update policy counter by reading from CSR mcycle/minstret */
   enclave_policies[eid].instr_count = (uint64_t)csr_read(minstret);
   enclave_policies[eid].cycle_count = (uint64_t)csr_read(mcycle);
+  //sbi_printf("(context switch) current instruction count: %10lu \n", (uint64_t)csr_read(minstret));
 }
 
 static inline void context_switch_to_host(struct sbi_trap_regs *regs,
@@ -148,7 +158,13 @@ static inline int enclave_detect_policy_violation(enclave_id eid){
 }
 
 static inline int enclave_validate_policy(uint64_t* instr_per_epoch, uint64_t* cycles_per_epoch){
-  return 1;
+  if (*cycles_per_epoch <= remaining_budget) {
+    sbi_printf("Remaining cycles budged: %10lu", remaining_budget);
+    remaining_budget = remaining_budget - *cycles_per_epoch;
+    return 1; //what is better?
+  }
+  
+  return 0;
 }
 
 // TODO: This function is externally used.
@@ -354,6 +370,7 @@ static int is_create_args_valid(struct keystone_sbi_create* args)
  */
 unsigned long create_enclave(unsigned long *eidptr, struct keystone_sbi_create create_args)
 {
+
   /* EPM and UTM parameters */
   uintptr_t base = create_args.epm_region.paddr;
   size_t size = create_args.epm_region.size;
@@ -380,8 +397,9 @@ unsigned long create_enclave(unsigned long *eidptr, struct keystone_sbi_create c
   /* set policy params*/
   // uint64_t instr_per_epoch = create_args.instr_per_epoch;
   // uint64_t cycles_per_epoch = create_args.cycles_per_epoch;
-  uint64_t instr_per_epoch = 0;
-  uint64_t cycles_per_epoch = 0;
+  uint64_t instr_per_epoch = 100000000;
+  uint64_t cycles_per_epoch = 100000000;
+  remaining_budget = (uint64_t)BUDGET_CYCLES;
   // sbi_printf("%20s %10lu \n%20s %10lu \n", "Want instructions:",create_args.instr_per_epoch, "Want cycles:", create_args.cycles_per_epoch);
 
   // allocate eid
@@ -458,6 +476,9 @@ unsigned long create_enclave(unsigned long *eidptr, struct keystone_sbi_create c
   /* EIDs are unsigned int in size, copy via simple copy */
   *eidptr = eid;
 
+  sbi_printf("Eid assigned: %x \n", eid);
+  enclave_is_running = 1;
+
   spin_unlock(&encl_lock);
   return SBI_ERR_SM_ENCLAVE_SUCCESS;
 
@@ -491,8 +512,10 @@ unsigned long destroy_enclave(enclave_id eid)
                  && enclaves[eid].state <= STOPPED);
   /* update the enclave state first so that
    * no SM can run the enclave any longer */
-  if(destroyable)
+  if(destroyable) {
+    enclave_is_running = 0;
     enclaves[eid].state = DESTROYING;
+  }
   spin_unlock(&encl_lock);
 
   if(!destroyable)
@@ -633,6 +656,7 @@ unsigned long resume_enclave(struct sbi_trap_regs *regs, enclave_id eid)
     enclaves[eid].state = RUNNING;
   }
   spin_unlock(&encl_lock);
+
 
   // Enclave is OK to resume, context switch to it
   context_switch_to_enclave(regs, eid, 0);
