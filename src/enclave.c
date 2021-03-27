@@ -159,7 +159,7 @@ static inline int enclave_detect_policy_violation(enclave_id eid){
 
 static inline int enclave_validate_policy(uint64_t* instr_per_epoch, uint64_t* cycles_per_epoch){
   if (*cycles_per_epoch <= remaining_budget) {
-    sbi_printf("Remaining cycles budged: %10lu", remaining_budget);
+    sbi_printf("Remaining cycles budged: %10lu \n", remaining_budget);
     remaining_budget = remaining_budget - *cycles_per_epoch;
     return 1; //what is better?
   }
@@ -398,7 +398,10 @@ unsigned long create_enclave(unsigned long *eidptr, struct keystone_sbi_create c
   // uint64_t instr_per_epoch = create_args.instr_per_epoch;
   // uint64_t cycles_per_epoch = create_args.cycles_per_epoch;
   uint64_t instr_per_epoch = 100000000;
-  uint64_t cycles_per_epoch = 100000000;
+  uint64_t cycles_per_epoch = create_args.cycles_per_epoch;
+  sbi_printf("Want %lu cycles per epoch \n", cycles_per_epoch);
+  
+  /* TODO: recalculate budget, stop enclave if budget used up */
   remaining_budget = (uint64_t)BUDGET_CYCLES;
   // sbi_printf("%20s %10lu \n%20s %10lu \n", "Want instructions:",create_args.instr_per_epoch, "Want cycles:", create_args.cycles_per_epoch);
 
@@ -446,8 +449,7 @@ unsigned long create_enclave(unsigned long *eidptr, struct keystone_sbi_create c
    */
 
   if(enclave_validate_policy(&instr_per_epoch, &cycles_per_epoch)){
-    enclaves[eid].policy.instr_per_epoch = instr_per_epoch;
-    enclaves[eid].policy.cycles_per_epoch = cycles_per_epoch;
+    enclaves[eid].cycles_per_epoch = cycles_per_epoch;
 
     /* set counter */
     enclave_policies[eid].instr_count = 0;

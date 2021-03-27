@@ -62,17 +62,6 @@ struct enclave_region
   enum enclave_region_type type;
 };
 
-/* Enclave policy 
- * Each enclave can register a policy of
- * how many instructions/cycles it wants
- * to run in an epoch
- */
-struct enclave_policy
-{
-  uint64_t instr_per_epoch;
-  uint64_t cycles_per_epoch;
-};
-
 /* Enclave policy counter
  * Tracking the instruction and
  * cycles that an enclave was able to
@@ -114,8 +103,12 @@ struct enclave
 
   struct platform_enclave_data ped;
 
-  /* the enclaves policy */
-  struct enclave_policy policy;
+  /* Enclave policy 
+ * Each enclave can register a policy of
+ * how many instructions/cycles it wants
+ * to run in an epoch
+ */
+  uint64_t cycles_per_epoch;
 };
 
 /* attestation reports */

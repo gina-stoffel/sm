@@ -110,7 +110,6 @@ struct keystone_sbi_create
   unsigned int* eid_pptr;
 
   /* define optional policy */
-  uint64_t instr_per_epoch;
   uint64_t cycles_per_epoch;
 };
 
