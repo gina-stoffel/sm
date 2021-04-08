@@ -27,9 +27,7 @@ extern void restore_host_regs(void);
 extern byte dev_public_key[PUBLIC_KEY_SIZE];
 
 /* flag for trap recording */
-int enclave_is_running = 0;
-
-
+int trap_counter = 0;
 
 /* enclave_policy holds information about the instructions/cycles run by each enclave */
 struct enclave_policy_counter enclave_policies[ENCL_MAX];
@@ -41,6 +39,28 @@ struct enclave_policy_counter enclave_policies[ENCL_MAX];
  *
  ****************************/
 
+
+/* take policy measurement */
+// some places need: int eid = cpu_get_enclave_id();
+void policy_measurement(int eid) {
+
+	//if (enclave_policies[eid].instr_count && enclave_policies[eid].cycle_count ) { // TODO: is this really needed?
+	uint64_t measurement_1 = csr_read(minstret); // lets try to use this as a fix point
+	// uint64_t measurement_2 = csr_read(minstret);
+	uint64_t measurement_c = csr_read(mcycle);
+	// sbi_printf("Sanity check: are these two instruction counts close? %10lu and %10lu\n", measurement_1, measurement_2);
+	/* calculate total instructions and cycles run so far*/
+	enclave_policies[eid].instr_run_tot = enclave_policies[eid].instr_run_tot + (measurement_1 - enclave_policies[eid].instr_count);
+	enclave_policies[eid].cycles_run_tot = enclave_policies[eid].cycles_run_tot + (measurement_c - enclave_policies[eid].cycle_count);
+	
+	sbi_printf("[sm]policy measurement: %10s %10lu \r\n\t %10s %10lu\n", "instr_run_total:", enclave_policies[eid].instr_run_tot, "cycles_run_total:", enclave_policies[eid].cycles_run_tot);
+
+	/* update the current instruction/cycle count */
+	enclave_policies[eid].instr_count = measurement_1;
+	enclave_policies[eid].cycle_count = measurement_c;
+
+}
+
 /* Internal function containing the core of the context switching
  * code to the enclave.
  *
@@ -51,6 +71,8 @@ struct enclave_policy_counter enclave_policies[ENCL_MAX];
 static inline void context_switch_to_enclave(struct sbi_trap_regs* regs,
                                                 enclave_id eid,
                                                 int load_parameters){
+  sbi_printf("[sm] context switch to enclave\n");
+
   /* save host context */
   swap_prev_state(&enclaves[eid].threads[0], regs, 1);
   swap_prev_mepc(&enclaves[eid].threads[0], regs, regs->mepc);
@@ -108,6 +130,8 @@ static inline void context_switch_to_host(struct sbi_trap_regs *regs,
     enclave_id eid,
     int return_on_resume){
 
+  sbi_printf("[sm] context switch to host\n");
+
   // set PMP
   int memid;
   for(memid=0; memid < ENCLAVE_REGIONS_MAX; memid++) {
@@ -157,10 +181,10 @@ static inline int enclave_detect_policy_violation(enclave_id eid){
   return 0; // 0: false, 1: true
 }
 
-static inline int enclave_validate_policy(uint64_t* instr_per_epoch, uint64_t* cycles_per_epoch){
-  if (*cycles_per_epoch <= remaining_budget) {
-    sbi_printf("Remaining cycles budged: %10lu \n", remaining_budget);
-    remaining_budget = remaining_budget - *cycles_per_epoch;
+static inline int enclave_validate_policy(uint64_t cycles_per_epoch){
+  if (cycles_per_epoch < remaining_budget) {
+    remaining_budget = remaining_budget - cycles_per_epoch;
+    sbi_printf("Remaining cycles budget: %10lu \n", remaining_budget);
     return 1; //what is better?
   }
   
@@ -273,6 +297,7 @@ uintptr_t get_enclave_region_base(enclave_id eid, int memid)
 unsigned long copy_enclave_create_args(uintptr_t src, struct keystone_sbi_create* dest){
 
   int region_overlap = copy_to_sm(dest, src, sizeof(struct keystone_sbi_create));
+  sbi_printf("[sm]the following cycles are choosen: %lu\n", dest->cycles_per_epoch);
 
   if (region_overlap)
     return SBI_ERR_SM_ENCLAVE_REGION_OVERLAPS;
@@ -308,14 +333,15 @@ static int is_create_args_valid(struct keystone_sbi_create* args)
 {
   uintptr_t epm_start, epm_end;
 
-  /* printm("[create args info]: \r\n\tepm_addr: %llx\r\n\tepmsize: %llx\r\n\tutm_addr: %llx\r\n\tutmsize: %llx\r\n\truntime_addr: %llx\r\n\tuser_addr: %llx\r\n\tfree_addr: %llx\r\n", */
-  /*        args->epm_region.paddr, */
-  /*        args->epm_region.size, */
-  /*        args->utm_region.paddr, */
-  /*        args->utm_region.size, */
-  /*        args->runtime_paddr, */
-  /*        args->user_paddr, */
-  /*        args->free_paddr); */
+   sbi_printf("[create args info]: \r\n\tepm_addr: %lx\r\n\tepmsize: %lx\r\n\tutm_addr: %lx\r\n\tutmsize: %lx\r\n\truntime_addr: %lx\r\n\tuser_addr: %lx\r\n\tfree_addr: %lx\r\n\tcycle_count: %lx\r\n", 
+          args->epm_region.paddr, 
+          args->epm_region.size, 
+          args->utm_region.paddr, 
+          args->utm_region.size, 
+          args->runtime_paddr, 
+          args->user_paddr,
+          args->free_paddr,
+          args->cycles_per_epoch);
 
   // check if physical addresses are valid
   if (args->epm_region.size <= 0)
@@ -397,8 +423,8 @@ unsigned long create_enclave(unsigned long *eidptr, struct keystone_sbi_create c
   /* set policy params*/
   // uint64_t instr_per_epoch = create_args.instr_per_epoch;
   // uint64_t cycles_per_epoch = create_args.cycles_per_epoch;
-  uint64_t instr_per_epoch = 100000000;
-  sbi_printf("Enclave reqested %lu cycles per epoch \n", create_args.cycles_per_epoch);
+  // uint64_t instr_per_epoch = 100000000;
+  sbi_printf("[sm]Enclave reqested %lu cycles per epoch \n", create_args.cycles_per_epoch);
   uint64_t cycles_per_epoch = create_args.cycles_per_epoch;
   
   /* TODO: recalculate budget, stop enclave if budget used up */
@@ -448,7 +474,7 @@ unsigned long create_enclave(unsigned long *eidptr, struct keystone_sbi_create c
    * TODO: verify all policies first
    */
 
-  if(enclave_validate_policy(&instr_per_epoch, &cycles_per_epoch)){
+  if(enclave_validate_policy(cycles_per_epoch)){
     enclaves[eid].cycles_per_epoch = cycles_per_epoch;
 
     /* set counter */
@@ -479,7 +505,6 @@ unsigned long create_enclave(unsigned long *eidptr, struct keystone_sbi_create c
   *eidptr = eid;
 
   sbi_printf("Eid assigned: %x \n", eid);
-  enclave_is_running = 1;
 
   spin_unlock(&encl_lock);
   return SBI_ERR_SM_ENCLAVE_SUCCESS;
@@ -509,13 +534,15 @@ unsigned long destroy_enclave(enclave_id eid)
 {
   int destroyable;
 
+  sbi_printf("[sm]Total trap count: %u\n", trap_counter);
+  sbi_printf("[sm]Total  cycle count: %lu \n Total instr count: %lu \n", enclave_policies[eid].cycles_run_tot, enclave_policies[eid].instr_run_tot);
+
   spin_lock(&encl_lock);
   destroyable = (ENCLAVE_EXISTS(eid)
                  && enclaves[eid].state <= STOPPED);
   /* update the enclave state first so that
    * no SM can run the enclave any longer */
   if(destroyable) {
-    enclave_is_running = 0;
     enclaves[eid].state = DESTROYING;
   }
   spin_unlock(&encl_lock);

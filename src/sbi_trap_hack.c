@@ -83,6 +83,7 @@ static void sbi_trap_error(const char *msg, int rc,
  */
 void sbi_trap_handler_keystone_enclave(struct sbi_trap_regs *regs)
 {
+
 	int rc = SBI_ENOTSUPP;
 	const char *msg = "trap handler failed";
 	ulong mcause = csr_read(CSR_MCAUSE);
@@ -94,6 +95,9 @@ void sbi_trap_handler_keystone_enclave(struct sbi_trap_regs *regs)
 		mtinst = csr_read(CSR_MTINST);
 	}
 
+	// record every trap that the enclave sees in here
+	sbi_printf("[opensbi]trap infos \r\n\t %-20s %20lu \r\n\t %-20s %20lu \r\n\t %-20s %20lu \r\n", "Trap cause:", mcause, "Trap info:", mtval, "Trap instr:", mtinst);
+	
 	if (mcause & (1UL << (__riscv_xlen - 1))) {
 		mcause &= ~(1UL << (__riscv_xlen - 1));
 		switch (mcause) {

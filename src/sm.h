@@ -110,7 +110,7 @@ struct keystone_sbi_create
   unsigned int* eid_pptr;
 
   /* define optional policy */
-  uint64_t cycles_per_epoch;
+  uintptr_t cycles_per_epoch;
 };
 
 int osm_pmp_set(uint8_t perm);

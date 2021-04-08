@@ -20,6 +20,7 @@ static int sbi_ecall_keystone_enclave_handler(unsigned long extid, unsigned long
                      struct sbi_trap_info *out_trap)
 {
   uintptr_t retval;
+  sbi_printf("[sm]Ecall handler received the following function id: %lu\n", funcid);
 
   if (funcid <= FID_RANGE_DEPRECATED) { return SBI_ERR_SM_DEPRECATED; }
   else if (funcid <= FID_RANGE_HOST)
