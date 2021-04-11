@@ -83,6 +83,8 @@ static void sbi_trap_error(const char *msg, int rc,
  */
 void sbi_trap_handler_keystone_enclave(struct sbi_trap_regs *regs)
 {
+	/* take policy measurement to update the total cycles run by the enclave */
+	policy_measurement(cpu_get_enclave_id());
 
 	int rc = SBI_ENOTSUPP;
 	const char *msg = "trap handler failed";
@@ -96,7 +98,7 @@ void sbi_trap_handler_keystone_enclave(struct sbi_trap_regs *regs)
 	}
 
 	// record every trap that the enclave sees in here
-	sbi_printf("[opensbi]trap infos \r\n\t %-20s %20lu \r\n\t %-20s %20lu \r\n\t %-20s %20lu \r\n", "Trap cause:", mcause, "Trap info:", mtval, "Trap instr:", mtinst);
+	//sbi_printf("[sm trap handler]trap infos \r\n\t %-20s %20lu \r\n\t %-20s %20lu \r\n\t %-20s %20lu \r\n", "Trap cause:", mcause, "Trap info:", mtval, "Trap instr:", mtinst);
 	
 	if (mcause & (1UL << (__riscv_xlen - 1))) {
 		mcause &= ~(1UL << (__riscv_xlen - 1));
@@ -137,8 +139,6 @@ void sbi_trap_handler_keystone_enclave(struct sbi_trap_regs *regs)
 		break;
 	case CAUSE_SUPERVISOR_ECALL:
 	case CAUSE_MACHINE_ECALL:
-		//sbi_printf("SM SBI: Trap cause: %8lu Trap info: %8lu Trap instr: %8lu \n", mcause, mtval, mtinst);
-
 		rc  = sbi_ecall_handler(regs);
 		msg = "ecall handler failed";
 		break;
@@ -152,6 +152,13 @@ void sbi_trap_handler_keystone_enclave(struct sbi_trap_regs *regs)
 		rc = sbi_trap_redirect(regs, &trap);
 		break;
 	};
+
+	/* todo: check if there are no edge cases with redirected traps
+	 * todo: check if this should just be under s/m call or in general for all traps?
+	 * in general we want to update the last seen cycle count here
+	 * since the enclave might continue (i.e. it was not stopped)
+	 */
+	set_measurement(cpu_get_enclave_id());
 
 trap_error:
 	if (rc)

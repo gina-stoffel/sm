@@ -26,9 +26,6 @@ extern void save_host_regs(void);
 extern void restore_host_regs(void);
 extern byte dev_public_key[PUBLIC_KEY_SIZE];
 
-/* flag for trap recording */
-int trap_counter = 0;
-
 /* enclave_policy holds information about the instructions/cycles run by each enclave */
 struct enclave_policy_counter enclave_policies[ENCL_MAX];
 
@@ -44,21 +41,22 @@ struct enclave_policy_counter enclave_policies[ENCL_MAX];
 // some places need: int eid = cpu_get_enclave_id();
 void policy_measurement(int eid) {
 
-	//if (enclave_policies[eid].instr_count && enclave_policies[eid].cycle_count ) { // TODO: is this really needed?
-	uint64_t measurement_1 = csr_read(minstret); // lets try to use this as a fix point
-	// uint64_t measurement_2 = csr_read(minstret);
+	uint64_t measurement_i = csr_read(minstret); // lets try to use this as a fix point
 	uint64_t measurement_c = csr_read(mcycle);
-	// sbi_printf("Sanity check: are these two instruction counts close? %10lu and %10lu\n", measurement_1, measurement_2);
+	
 	/* calculate total instructions and cycles run so far*/
-	enclave_policies[eid].instr_run_tot = enclave_policies[eid].instr_run_tot + (measurement_1 - enclave_policies[eid].instr_count);
+	enclave_policies[eid].instr_run_tot  = enclave_policies[eid].instr_run_tot  + (measurement_i - enclave_policies[eid].instr_count);
 	enclave_policies[eid].cycles_run_tot = enclave_policies[eid].cycles_run_tot + (measurement_c - enclave_policies[eid].cycle_count);
 	
-	sbi_printf("[sm]policy measurement: %10s %10lu \r\n\t %10s %10lu\n", "instr_run_total:", enclave_policies[eid].instr_run_tot, "cycles_run_total:", enclave_policies[eid].cycles_run_tot);
+	//sbi_printf("[sm]policy measurement: %10s %10lu \r\n\t %10s %10lu\n", "instr_run_total:", enclave_policies[eid].instr_run_tot, "cycles_run_total:", enclave_policies[eid].cycles_run_tot);
+}
 
-	/* update the current instruction/cycle count */
-	enclave_policies[eid].instr_count = measurement_1;
-	enclave_policies[eid].cycle_count = measurement_c;
-
+void set_measurement(int eid) {
+  //sbi_printf("[sm]updating the current measurement\n");
+  
+  /* update policy counter by reading from CSR mcycle/minstret */
+  enclave_policies[eid].instr_count = (uint64_t)csr_read(minstret);
+  enclave_policies[eid].cycle_count = (uint64_t)csr_read(mcycle);
 }
 
 /* Internal function containing the core of the context switching
@@ -121,9 +119,7 @@ static inline void context_switch_to_enclave(struct sbi_trap_regs* regs,
   cpu_enter_enclave_context(eid);
 
   /* update policy counter by reading from CSR mcycle/minstret */
-  enclave_policies[eid].instr_count = (uint64_t)csr_read(minstret);
-  enclave_policies[eid].cycle_count = (uint64_t)csr_read(mcycle);
-  //sbi_printf("(context switch) current instruction count: %10lu \n", (uint64_t)csr_read(minstret));
+  set_measurement(eid);
 }
 
 static inline void context_switch_to_host(struct sbi_trap_regs *regs,
@@ -534,8 +530,7 @@ unsigned long destroy_enclave(enclave_id eid)
 {
   int destroyable;
 
-  sbi_printf("[sm]Total trap count: %u\n", trap_counter);
-  sbi_printf("[sm]Total  cycle count: %lu \n Total instr count: %lu \n", enclave_policies[eid].cycles_run_tot, enclave_policies[eid].instr_run_tot);
+  sbi_printf("[sm]Policy Overview \r\n\t Total cycle count: %lu \r\n\t Total instr count: %lu \n", enclave_policies[eid].cycles_run_tot, enclave_policies[eid].instr_run_tot);
 
   spin_lock(&encl_lock);
   destroyable = (ENCLAVE_EXISTS(eid)

@@ -23,8 +23,6 @@
 /* TODO: does not support multithreaded enclave yet */
 #define MAX_ENCL_THREADS 1
 
-/* flag for trap recording */
-extern int trap_counter;
 
 typedef enum {
   INVALID = -1,
@@ -143,6 +141,7 @@ struct sealing_key
 /*** SBI functions & external functions ***/
 // callables from the host
 void policy_measurement(int eid);
+void set_measurement(int eid);
 unsigned long create_enclave(unsigned long *eid, struct keystone_sbi_create create_args);
 unsigned long destroy_enclave(enclave_id eid);
 unsigned long run_enclave(struct sbi_trap_regs *regs, enclave_id eid);
