@@ -105,12 +105,13 @@ struct keystone_sbi_create
   uintptr_t runtime_paddr;
   uintptr_t user_paddr;
   uintptr_t free_paddr;
-
-  struct runtime_va_params_t params;
-  unsigned int* eid_pptr;
-
+  
   /* define optional policy */
   uintptr_t cycles_per_epoch;
+
+  struct runtime_va_params_t params;
+  //unsigned int* eid_pptr;
+
 };
 
 int osm_pmp_set(uint8_t perm);

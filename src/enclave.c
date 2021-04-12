@@ -417,11 +417,8 @@ unsigned long create_enclave(unsigned long *eidptr, struct keystone_sbi_create c
   pa_params.free_base = create_args.free_paddr;
 
   /* set policy params*/
-  // uint64_t instr_per_epoch = create_args.instr_per_epoch;
-  // uint64_t cycles_per_epoch = create_args.cycles_per_epoch;
-  // uint64_t instr_per_epoch = 100000000;
-  sbi_printf("[sm]Enclave reqested %lu cycles per epoch \n", create_args.cycles_per_epoch);
-  uint64_t cycles_per_epoch = create_args.cycles_per_epoch;
+  uint64_t cycles_per_epoch = (uint64_t)create_args.cycles_per_epoch;
+  sbi_printf("[sm]Enclave reqested %lu, %lu cycles per epoch \n", create_args.cycles_per_epoch, cycles_per_epoch);
   
   /* TODO: recalculate budget, stop enclave if budget used up */
   remaining_budget = (uint64_t)BUDGET_CYCLES;
