@@ -22,7 +22,8 @@
 #define ENCLAVE_REGIONS_MAX 8
 /* TODO: does not support multithreaded enclave yet */
 #define MAX_ENCL_THREADS 1
-
+/* define epoch in cycles */
+#define POLICY_EPOCH 500
 
 typedef enum {
   INVALID = -1,
@@ -71,10 +72,8 @@ struct enclave_policy_counter
   uint64_t cycle_count;
   uint64_t instr_run_tot; // the sum of instructions that were run
   uint64_t cycles_run_tot;
+  uint64_t cycles_run_tot_epoch; // store information epoch wise
 };
-
-/* enclave_policy holds information about the instructions/cycles run by each enclave */
-extern struct enclave_policy_counter enclave_policies[ENCL_MAX];
 
 /* enclave metadata */
 struct enclave
@@ -107,6 +106,7 @@ struct enclave
  * to run in an epoch
  */
   uint64_t cycles_per_epoch;
+  bool violation_detected;
 };
 
 /* attestation reports */
@@ -142,6 +142,8 @@ struct sealing_key
 // callables from the host
 void policy_measurement(int eid);
 void set_measurement(int eid);
+bool detect_policy_violation();
+void print_policy_warning();
 unsigned long create_enclave(unsigned long *eid, struct keystone_sbi_create create_args);
 unsigned long destroy_enclave(enclave_id eid);
 unsigned long run_enclave(struct sbi_trap_regs *regs, enclave_id eid);
