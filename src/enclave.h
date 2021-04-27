@@ -23,7 +23,9 @@
 /* TODO: does not support multithreaded enclave yet */
 #define MAX_ENCL_THREADS 1
 /* define epoch in cycles */
-#define POLICY_EPOCH 500
+#define POLICY_EPOCH 5000000
+/* set budget for policy */
+#define BUDGET_CYCLES 500000000
 
 typedef enum {
   INVALID = -1,
@@ -73,6 +75,7 @@ struct enclave_policy_counter
   uint64_t instr_run_tot; // the sum of instructions that were run
   uint64_t cycles_run_tot;
   uint64_t cycles_run_tot_epoch; // store information epoch wise
+  bool voluntary_yield;
 };
 
 /* enclave metadata */
@@ -105,8 +108,9 @@ struct enclave
  * how many instructions/cycles it wants
  * to run in an epoch
  */
-  uint64_t cycles_per_epoch;
-  bool violation_detected;
+  uint64_t cycles_per_epoch;    // enclave requests cycles_per_epoch to run
+  bool policy_protected_encl;   // if set, enclave is checked for policy violations
+  bool violation_detected;      // if set, enclave is yielding and no policy is checked
 };
 
 /* attestation reports */
@@ -139,11 +143,12 @@ struct sealing_key
 };
 
 /*** SBI functions & external functions ***/
-// callables from the host
+void activate_enclave_policy();
 void policy_measurement(int eid);
 void set_measurement(int eid);
 bool detect_policy_violation();
 void print_policy_warning();
+// callables from the host
 unsigned long create_enclave(unsigned long *eid, struct keystone_sbi_create create_args);
 unsigned long destroy_enclave(enclave_id eid);
 unsigned long run_enclave(struct sbi_trap_regs *regs, enclave_id eid);

@@ -7,6 +7,7 @@
 #include "pmp.h"
 #include "page.h"
 #include "cpu.h"
+#include "sm.h"
 #include "platform-hook.h"
 #include <sbi/sbi_string.h>
 #include <sbi/riscv_asm.h>
@@ -15,10 +16,6 @@
 
 struct enclave enclaves[ENCL_MAX];
 #define ENCLAVE_EXISTS(eid) (eid >= 0 && eid < ENCL_MAX && enclaves[eid].state >= 0)
-
-/* set budget for policy */
-#define BUDGET_CYCLES 500000000
-uint64_t remaining_budget;
 
 static spinlock_t encl_lock = SPIN_LOCK_INITIALIZER;
 
@@ -38,6 +35,19 @@ struct enclave_policy_counter enclave_policies[ENCL_MAX];
 
 /* epoch counter */
 unsigned long last_epoch;
+
+/* activate policy checking
+ * note that this function is called from sbi random and
+ * it is used after the enclave booted the eyrie runtime
+ * thus, the large offset of cycles from booting will 
+ * not be counted for the enclave
+ */
+void activate_enclave_policy() {
+  sbi_printf("[sm]The current cycle count is: %lu \n\r\t the enclave spent %lu cycles \n", csr_read(mcycle), enclave_policies[cpu_get_enclave_id()].cycles_run_tot);
+  
+  enclaves[cpu_get_enclave_id()].policy_protected_encl = true;
+  return;
+}
 
 /* take policy measurement 
  * meaning that we add up
@@ -78,16 +88,16 @@ void set_measurement(int eid) {
  * if violation is found or not
  */
 bool detect_policy_violation() {
-  /* only check for violations if an epoch (i.e. a certain number of cycles) has passed */
   uint64_t current_cycles = csr_read(mcycle);
 
+  /* only check for violations if an epoch (i.e. a certain number of cycles) has passed */
   if (current_cycles + POLICY_EPOCH >= last_epoch) {
     bool ret = false;
     
     /* iterate over all enclaves to see if their policy is violated or not */
     for (int eid = 0; eid < ENCL_MAX; eid++) {
-      if (ENCLAVE_EXISTS(eid)) {
-        sbi_printf("[sm]enclave was running for %lu cycles this epoch\n", enclave_policies[eid].cycles_run_tot_epoch);
+      if (ENCLAVE_EXISTS(eid) && !enclave_policies[eid].voluntary_yield && enclaves[eid].policy_protected_encl) {
+        sbi_printf("[sm]enclave %d was running for %lu cycles this epoch\n", eid, enclave_policies[eid].cycles_run_tot_epoch);
 
         /* check if cycles are granted */
         if (enclave_policies[eid].cycles_run_tot_epoch < enclaves[eid].cycles_per_epoch) {
@@ -102,8 +112,6 @@ bool detect_policy_violation() {
         enclave_policies[eid].cycles_run_tot_epoch = 0;
       }
     }
-
-    
     /* reset the last epoch, at which called this
     * function here
     */
@@ -119,7 +127,12 @@ bool detect_policy_violation() {
 
 /* implement different sanctions */
 void print_policy_warning() {
-  sbi_printf("\nWARNING: the enclave with ID %d is not able to run the cycles requested!\n", eid);
+  for (int eid = 0; eid < ENCL_MAX; eid++) {
+    /* check if this enclave has been discriminated */
+    if (ENCLAVE_EXISTS(eid) && enclaves[eid].violation_detected) {  
+      sbi_printf("\nWARNING: the enclave with ID %d is not able to run the cycles requested!\n", eid);
+    }
+  }
 }
 
 
@@ -140,6 +153,7 @@ static inline void context_switch_to_enclave(struct sbi_trap_regs* regs,
                                                 enclave_id eid,
                                                 int load_parameters){
   //sbi_printf("[sm] context switch to enclave\n");
+  enclave_policies[eid].voluntary_yield = false;
 
   /* save host context */
   swap_prev_state(&enclaves[eid].threads[0], regs, 1);
@@ -238,13 +252,6 @@ static inline void context_switch_to_host(struct sbi_trap_regs *regs,
   cpu_exit_enclave_context();
 
   return;
-}
-
-/* Internal function used to validate and detect policy violations
- * of an enclave.
- */
-static inline int enclave_detect_policy_violation(enclave_id eid){
-  return 0; // 0: false, 1: true
 }
 
 static inline int enclave_validate_policy(uint64_t cycles_per_epoch){
@@ -489,9 +496,6 @@ unsigned long create_enclave(unsigned long *eidptr, struct keystone_sbi_create c
   /* set policy params*/
   uint64_t cycles_per_epoch = (uint64_t)create_args.cycles_per_epoch;
   //sbi_printf("[sm]Enclave reqested %lu, %lu cycles per epoch \n", create_args.cycles_per_epoch, cycles_per_epoch);
-  
-  /* TODO: recalculate budget, stop enclave if budget used up */
-  remaining_budget = (uint64_t)BUDGET_CYCLES;
   // sbi_printf("%20s %10lu \n%20s %10lu \n", "Want instructions:",create_args.instr_per_epoch, "Want cycles:", create_args.cycles_per_epoch);
 
   // allocate eid
@@ -532,26 +536,27 @@ unsigned long create_enclave(unsigned long *eidptr, struct keystone_sbi_create c
   enclaves[eid].params = params;
   enclaves[eid].pa_params = pa_params;
 
-   /* check if a policy is set
-   * if so, verify that the policy can be fulfilled
-   * TODO: verify all policies first
-   */
-
-  if(enclave_validate_policy(cycles_per_epoch)){
-    enclaves[eid].cycles_per_epoch = cycles_per_epoch;
-    enclaves[eid].violation_detected = false;
-
-    /* set counter */
-    enclave_policies[eid].instr_count = 0;
-    enclave_policies[eid].cycle_count = 0;
-    enclave_policies[eid].instr_run_tot = 0;
-    enclave_policies[eid].cycles_run_tot = 0;
-    enclave_policies[eid].cycles_run_tot_epoch = 0;
+   /* verify that the policy can be fulfilled */
+  if(!enclave_validate_policy(cycles_per_epoch)){
+    /* for now we just let is pass and start the enclave*/
+    sbi_printf("[sm]WARNING no cycle budget left for enclave with id %d\n!", eid);
+    cycles_per_epoch = 0;
+  }
+  sbi_printf("[sm]The current epoch is %u \n", POLICY_EPOCH);
+  enclaves[eid].cycles_per_epoch = cycles_per_epoch;
+  enclaves[eid].policy_protected_encl = false;
+  enclaves[eid].violation_detected = false;
+  /* set counter */
+  enclave_policies[eid].instr_count = 0;
+  enclave_policies[eid].cycle_count = 0;
+  enclave_policies[eid].instr_run_tot = 0;
+  enclave_policies[eid].cycles_run_tot = 0;
+  enclave_policies[eid].cycles_run_tot_epoch = 0;
+  enclave_policies[eid].voluntary_yield = false;
     
-    /* start epoch from here */
-    if (!last_epoch) {
-      last_epoch = csr_read(mcycle);
-    }
+  /* start epoch from here */
+  if (!last_epoch) {
+    last_epoch = csr_read(mcycle);
   }
 
   /* Init enclave state (regs etc) */
@@ -604,7 +609,7 @@ unsigned long destroy_enclave(enclave_id eid)
 {
   int destroyable;
 
-  sbi_printf("[sm]Policy Overview \r\n\t Total cycle count: %lu \r\n\t Total instr count: %lu \n", enclave_policies[eid].cycles_run_tot, enclave_policies[eid].instr_run_tot);
+  sbi_printf("[sm]Policy overview for enclave with id %d \r\n\t Total cycle count: %lu \r\n\t Total instr count: %lu \n", eid, enclave_policies[eid].cycles_run_tot, enclave_policies[eid].instr_run_tot);
 
   spin_lock(&encl_lock);
   destroyable = (ENCLAVE_EXISTS(eid)
@@ -698,6 +703,9 @@ unsigned long exit_enclave(struct sbi_trap_regs *regs, enclave_id eid)
     enclaves[eid].n_thread--;
     if(enclaves[eid].n_thread == 0)
       enclaves[eid].state = STOPPED;
+
+    /* disable policy checking for now */
+    enclave_policies[eid].voluntary_yield = true;
   }
   spin_unlock(&encl_lock);
 
@@ -719,6 +727,9 @@ unsigned long stop_enclave(struct sbi_trap_regs *regs, uint64_t request, enclave
     enclaves[eid].n_thread--;
     if(enclaves[eid].n_thread == 0)
       enclaves[eid].state = STOPPED;
+    
+    /* disable policy checking for now */
+    enclave_policies[eid].voluntary_yield = true;
   }
   spin_unlock(&encl_lock);
 

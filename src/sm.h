@@ -63,6 +63,8 @@
 #define SBI_ERR_SM_PMP_REGION_OVERLAP                  100025
 #define SBI_ERR_SM_PMP_REGION_IMPOSSIBLE_TOR           100026
 
+extern uint64_t remaining_budget;
+
 void sm_init(bool cold_boot);
 
 /* platform specific functions */

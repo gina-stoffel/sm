@@ -24,6 +24,7 @@ extern byte sanctum_sm_signature[SIGNATURE_SIZE];
 extern byte sanctum_sm_secret_key[PRIVATE_KEY_SIZE];
 extern byte sanctum_sm_public_key[PUBLIC_KEY_SIZE];
 extern byte sanctum_dev_public_key[PUBLIC_KEY_SIZE];
+uint64_t remaining_budget;
 
 byte sm_hash[MDSIZE] = { 0, };
 byte sm_signature[SIGNATURE_SIZE] = { 0, };
@@ -179,6 +180,9 @@ void sm_init(bool cold_boot)
   sbi_printf("[SM] Keystone security monitor has been initialized!\n");
 
   sm_print_hash();
+
+  /* initialize cycles budget */
+  remaining_budget = (uint64_t)BUDGET_CYCLES;
 
   return;
   // for debug
