@@ -40,12 +40,12 @@ unsigned long last_epoch;
  * note that this function is called from sbi random and
  * it is used after the enclave booted the eyrie runtime
  * thus, the large offset of cycles from booting will 
- * not be counted for the enclave
+ * not be counted for the enclave cycle count
  */
 void activate_enclave_policy() {
-  sbi_printf("[sm]The current cycle count is: %lu \n\r\t the enclave spent %lu cycles \n", csr_read(mcycle), enclave_policies[cpu_get_enclave_id()].cycles_run_tot);
+  //sbi_printf("[sm]The current cycle count is: %lu \n\r\t the enclave spent %lu cycles \n", csr_read(mcycle), enclave_policies[cpu_get_enclave_id()].cycles_run_tot);
   
-  enclaves[cpu_get_enclave_id()].policy_protected_encl = true;
+  enclaves[cpu_get_enclave_id()].rt_booted = true;
   return;
 }
 
@@ -53,17 +53,21 @@ void activate_enclave_policy() {
  * meaning that we add up
  * the total cycle count
  */
-void policy_measurement(int eid) {
+void policy_measurement() {
 
-	uint64_t measurement_i = csr_read(minstret); // lets try to use this as a fix point
-	uint64_t measurement_c = csr_read(mcycle);
+  int eid = cpu_get_enclave_id();
+  if ( enclaves[eid].rt_booted ) {
+    uint64_t measurement_i = csr_read(minstret);
+    uint64_t measurement_c = csr_read(mcycle);
 
-  //sbi_printf("[sm]policy measurement \r\n\t cycle count: %lu \r\n ", measurement_c);
-	/* calculate total instructions and cycles run so far*/
-	enclave_policies[eid].instr_run_tot  = enclave_policies[eid].instr_run_tot  + (measurement_i - enclave_policies[eid].instr_count);
-	enclave_policies[eid].cycles_run_tot = enclave_policies[eid].cycles_run_tot + (measurement_c - enclave_policies[eid].cycle_count);
-	/* calculate counter for each epoch */
-  enclave_policies[eid].cycles_run_tot_epoch  = enclave_policies[eid].cycles_run_tot_epoch  + (measurement_c - enclave_policies[eid].cycle_count);
+    //sbi_printf("[sm]policy measurement \r\n\t cycle count: %lu \r\n ", measurement_c);
+    /* calculate total instructions and cycles run so far*/
+    enclave_policies[eid].instr_run_tot  = enclave_policies[eid].instr_run_tot  + (measurement_i - enclave_policies[eid].instr_count);
+    enclave_policies[eid].cycles_run_tot = enclave_policies[eid].cycles_run_tot + (measurement_c - enclave_policies[eid].cycle_count);
+    /* calculate counter for each epoch */
+    enclave_policies[eid].instr_run_tot_epoch  = enclave_policies[eid].instr_run_tot_epoch  + (measurement_i - enclave_policies[eid].instr_count);
+    enclave_policies[eid].cycles_run_tot_epoch  = enclave_policies[eid].cycles_run_tot_epoch  + (measurement_c - enclave_policies[eid].cycle_count);
+  }
 	
   //sbi_printf("[sm]policy measurement: %10s %10lu \r\n\t %10s %10lu\n", "instr_run_total:", enclave_policies[eid].instr_run_tot, "cycles_run_total:", enclave_policies[eid].cycles_run_tot);
 }
@@ -73,12 +77,15 @@ void policy_measurement(int eid) {
  * csr values in a stateful
  * variable
  */
-void set_measurement(int eid) {
+void set_measurement() {
   //sbi_printf("[sm]updating the current measurement\n");
   
-  /* update policy counter by reading from CSR mcycle/minstret */
-  enclave_policies[eid].instr_count = (uint64_t)csr_read(minstret);
-  enclave_policies[eid].cycle_count = (uint64_t)csr_read(mcycle);
+  int eid = cpu_get_enclave_id();
+  if ( enclaves[eid].rt_booted ) {
+    /* update policy counter by reading from CSR mcycle/minstret */
+    enclave_policies[eid].instr_count = (uint64_t)csr_read(minstret);
+    enclave_policies[eid].cycle_count = (uint64_t)csr_read(mcycle);
+  }
 }
 
 /* check if a policy for a certain
@@ -96,19 +103,23 @@ bool detect_policy_violation() {
     
     /* iterate over all enclaves to see if their policy is violated or not */
     for (int eid = 0; eid < ENCL_MAX; eid++) {
-      if (ENCLAVE_EXISTS(eid) && !enclave_policies[eid].voluntary_yield && enclaves[eid].policy_protected_encl) {
-        sbi_printf("[sm]enclave %d was running for %lu cycles this epoch\n", eid, enclave_policies[eid].cycles_run_tot_epoch);
+      if (ENCLAVE_EXISTS(eid) && !enclave_policies[eid].voluntary_yield && enclaves[eid].rt_booted) {
+        sbi_printf("[sm]Epoch update for enclave %d: \r\n\t %lu cycles \r\n\t %lu instructions \n", 
+          eid, 
+          enclave_policies[eid].cycles_run_tot_epoch, 
+          enclave_policies[eid].instr_run_tot_epoch);
 
         /* check if cycles are granted */
         if (enclave_policies[eid].cycles_run_tot_epoch < enclaves[eid].cycles_per_epoch) {
           /* in this case, not all cycles could be run that were requested */
-          enclaves[eid].violation_detected = true;
+          enclaves[eid].violation_count++;
           ret = true;
         }
 
         /* reset cycles run total, otherwise we will reach
         * a point where the condition above is always true
         */
+       enclave_policies[eid].instr_run_tot_epoch = 0;
         enclave_policies[eid].cycles_run_tot_epoch = 0;
       }
     }
@@ -129,8 +140,12 @@ bool detect_policy_violation() {
 void print_policy_warning() {
   for (int eid = 0; eid < ENCL_MAX; eid++) {
     /* check if this enclave has been discriminated */
-    if (ENCLAVE_EXISTS(eid) && enclaves[eid].violation_detected) {  
-      sbi_printf("\nWARNING: the enclave with ID %d is not able to run the cycles requested!\n", eid);
+    if (ENCLAVE_EXISTS(eid) && enclaves[eid].violation_count > EPOCH_TOLERANCE && enclaves[eid].violation_count % EPOCH_TOLERANCE) {  
+      sbi_printf("\nWARNING: enclave with ID %d is not able to run the cycles requested! \r\n\t want: %lu cycles \r\n\t got: %lu cycles, %lu instructions \n", 
+        eid,
+        enclaves[eid].cycles_per_epoch,
+        enclave_policies[eid].cycles_run_tot_epoch, 
+        enclave_policies[eid].instr_run_tot_epoch);
     }
   }
 }
@@ -203,7 +218,7 @@ static inline void context_switch_to_enclave(struct sbi_trap_regs* regs,
   cpu_enter_enclave_context(eid);
 
   /* update policy counter by reading from CSR mcycle/minstret */
-  set_measurement(eid);
+  set_measurement();
 }
 
 static inline void context_switch_to_host(struct sbi_trap_regs *regs,
@@ -542,15 +557,19 @@ unsigned long create_enclave(unsigned long *eidptr, struct keystone_sbi_create c
     sbi_printf("[sm]WARNING no cycle budget left for enclave with id %d\n!", eid);
     cycles_per_epoch = 0;
   }
-  sbi_printf("[sm]The current epoch is %u \n", POLICY_EPOCH);
+  sbi_printf("[sm]The current epoch is %u cycles long and tolerates %u violated epochs until escalation\n", 
+    POLICY_EPOCH,
+    EPOCH_TOLERANCE);
+  
   enclaves[eid].cycles_per_epoch = cycles_per_epoch;
-  enclaves[eid].policy_protected_encl = false;
-  enclaves[eid].violation_detected = false;
+  enclaves[eid].rt_booted = false;
+  enclaves[eid].violation_count = 0;
   /* set counter */
   enclave_policies[eid].instr_count = 0;
   enclave_policies[eid].cycle_count = 0;
   enclave_policies[eid].instr_run_tot = 0;
   enclave_policies[eid].cycles_run_tot = 0;
+  enclave_policies[eid].instr_run_tot_epoch = 0;
   enclave_policies[eid].cycles_run_tot_epoch = 0;
   enclave_policies[eid].voluntary_yield = false;
     
@@ -609,7 +628,11 @@ unsigned long destroy_enclave(enclave_id eid)
 {
   int destroyable;
 
-  sbi_printf("[sm]Policy overview for enclave with id %d \r\n\t Total cycle count: %lu \r\n\t Total instr count: %lu \n", eid, enclave_policies[eid].cycles_run_tot, enclave_policies[eid].instr_run_tot);
+  sbi_printf("[sm]Policy overview for enclave with id %d \r\n\t Total cycle count: %lu \r\n\t Total instr count: %lu \r\n\t Total violations per epoch: %lu\n", 
+    eid, 
+    enclave_policies[eid].cycles_run_tot, 
+    enclave_policies[eid].instr_run_tot,
+    enclaves[eid].violation_count);
 
   spin_lock(&encl_lock);
   destroyable = (ENCLAVE_EXISTS(eid)

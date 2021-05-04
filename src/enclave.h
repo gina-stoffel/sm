@@ -23,9 +23,10 @@
 /* TODO: does not support multithreaded enclave yet */
 #define MAX_ENCL_THREADS 1
 /* define epoch in cycles */
-#define POLICY_EPOCH 5000000
+#define POLICY_EPOCH 5000000    // number of cycles which define an epoch
+#define EPOCH_TOLERANCE 1       // defines number of (non consecutive) epochs after which alert is escalated
 /* set budget for policy */
-#define BUDGET_CYCLES 500000000
+#define BUDGET_CYCLES 900000000 // on real hardware this is given by the frequency
 
 typedef enum {
   INVALID = -1,
@@ -74,7 +75,8 @@ struct enclave_policy_counter
   uint64_t cycle_count;
   uint64_t instr_run_tot; // the sum of instructions that were run
   uint64_t cycles_run_tot;
-  uint64_t cycles_run_tot_epoch; // store information epoch wise
+  uint64_t instr_run_tot_epoch; // store information epoch wise
+  uint64_t cycles_run_tot_epoch;
   bool voluntary_yield;
 };
 
@@ -109,8 +111,8 @@ struct enclave
  * to run in an epoch
  */
   uint64_t cycles_per_epoch;    // enclave requests cycles_per_epoch to run
-  bool policy_protected_encl;   // if set, enclave is checked for policy violations
-  bool violation_detected;      // if set, enclave is yielding and no policy is checked
+  uint64_t violation_count;     // counts number of epochs in which policy was violated
+  bool rt_booted;               // if set, runtime booted successfully
 };
 
 /* attestation reports */
@@ -144,8 +146,8 @@ struct sealing_key
 
 /*** SBI functions & external functions ***/
 void activate_enclave_policy();
-void policy_measurement(int eid);
-void set_measurement(int eid);
+void policy_measurement();
+void set_measurement();
 bool detect_policy_violation();
 void print_policy_warning();
 // callables from the host

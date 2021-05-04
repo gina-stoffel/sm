@@ -84,12 +84,14 @@ static void sbi_trap_error(const char *msg, int rc,
 void sbi_trap_handler_keystone_enclave(struct sbi_trap_regs *regs)
 {
 	/* take policy measurement to update the total cycles run by the enclave */
-	int eid = cpu_get_enclave_id();
-	policy_measurement(eid);
+	policy_measurement();
 
 	if (detect_policy_violation()) {
 		/* choose sanction */
 		/* report detected policy violation to user */
+		/* note that esacalation is only done when flexible epoch
+		 * condition is violated
+		 */
 		print_policy_warning();
 	}
 
@@ -165,7 +167,7 @@ void sbi_trap_handler_keystone_enclave(struct sbi_trap_regs *regs)
 	 * in general we want to update the last seen cycle count here
 	 * since the enclave might continue (i.e. it was not stopped)
 	 */
-	set_measurement(cpu_get_enclave_id());
+	set_measurement();
 
 trap_error:
 	if (rc)
