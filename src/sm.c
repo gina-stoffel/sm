@@ -14,6 +14,7 @@
 #include <sbi/riscv_barrier.h>
 #include <sbi/sbi_console.h>
 #include <sbi/sbi_hart.h>
+uint64_t remaining_budget;
 
 static int sm_init_done = 0;
 static int sm_region_id = 0, os_region_id = 0;
@@ -166,6 +167,9 @@ void sm_init(bool cold_boot)
     sbi_printf("[SM] platform global init fatal error");
     sbi_hart_hang();
   }
+
+  /* initialize cycles budget */
+  remaining_budget = (uint64_t)BUDGET_CYCLES;
 
   sbi_printf("[SM] Keystone security monitor has been initialized!\n");
 

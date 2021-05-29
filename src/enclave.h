@@ -22,6 +22,11 @@
 /* TODO: does not support multithreaded enclave yet */
 #define MAX_ENCL_THREADS 1
 
+/* define epoch in cycles */
+#define POLICY_EPOCH 8000000    // number of cycles which define an epoch
+/* set budget for policy */
+#define BUDGET_CYCLES 800000000 // on real hardware this is given by the frequency
+
 typedef enum {
   INVALID = -1,
   DESTROYING = 0,
@@ -38,6 +43,26 @@ typedef enum {
 
 /* For now, eid's are a simple unsigned int */
 typedef unsigned int enclave_id;
+
+/*
+ * Policy Metadata
+ */
+/* Enclave policy counter
+ * Tracking the instruction and
+ * cycles that an enclave was able to
+ * run during an epochenclave_policies
+ */
+struct enclave_policy_counter
+{
+  uint64_t instr_count; // stores the most recent CSR value of when the enclave was run/resumed
+  uint64_t cycle_count;
+  uint64_t instr_run_tot; // the sum of instructions that were run
+  uint64_t cycles_run_tot;
+  uint64_t instr_run_tot_epoch; // store information epoch wise
+  uint64_t cycles_run_tot_epoch;
+  uint64_t voluntary_yield_count;
+  uint64_t voluntary_yield_count_tot;
+};
 
 /* Metadata around memory regions associate with this enclave
  * EPM is the 'home' for the enclave, contains runtime code/etc
@@ -82,6 +107,16 @@ struct enclave
   struct thread_state threads[MAX_ENCL_THREADS];
 
   struct platform_enclave_data ped;
+
+  /* Enclave policy 
+ * Each enclave can register a policy of
+ * how many instructions/cycles it wants
+ * to run in an epoch
+ */
+  uint64_t cycles_per_epoch;    // enclave requests cycles_per_epoch to run
+  uint64_t yields_per_epoch;     // counts number of epochs in which policy was violated
+  uint64_t violation_count;
+  bool rt_booted;               // if set, runtime booted successfully
 };
 
 /* attestation reports */
@@ -114,6 +149,13 @@ struct sealing_key
 };
 
 /*** SBI functions & external functions ***/
+// policy stuff
+void voluntary_yield();
+void activate_enclave_policy();
+void policy_measurement();
+void set_measurement();
+bool detect_policy_violation();
+void print_policy_warning();
 // callables from the host
 unsigned long create_enclave(unsigned long *eid, struct keystone_sbi_create create_args);
 unsigned long destroy_enclave(enclave_id eid);
