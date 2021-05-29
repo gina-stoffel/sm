@@ -23,9 +23,9 @@
 #define MAX_ENCL_THREADS 1
 
 /* define epoch in cycles */
-#define POLICY_EPOCH 8000000    // number of cycles which define an epoch
+#define POLICY_EPOCH 20000000    // number of cycles which define an epoch, 5 times the timer interrupts freq. (4M)
 /* set budget for policy */
-#define BUDGET_CYCLES 800000000 // on real hardware this is given by the frequency
+#define BUDGET_CYCLES 800000000 // on real hardware this is given by the frequency of the cpu
 
 typedef enum {
   INVALID = -1,
