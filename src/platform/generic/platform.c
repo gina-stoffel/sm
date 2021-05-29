@@ -30,6 +30,7 @@ void platform_switch_from_enclave(struct enclave* enclave){
 }
 
 uint64_t platform_random(){
+  activate_enclave_policy();
 #pragma message("Platform has no entropy source, this is unsafe. TEST ONLY")
   static uint64_t w = 0, s = 0xb5ad4eceda1ce2a9;
 
