@@ -1,4 +1,5 @@
 #include "enclave.h"
+#include "cpu.h"
 #include <sbi/riscv_asm.h>
 #include <sbi/riscv_encoding.h>
 #include <sbi/sbi_console.h>
@@ -82,6 +83,18 @@ static void sbi_trap_error(const char *msg, int rc,
  */
 void sbi_trap_handler_keystone_enclave(struct sbi_trap_regs *regs)
 {
+	/* take policy measurement to update the total cycles run by the enclave */
+	policy_measurement();
+
+	if (detect_policy_violation()) {
+		/* choose sanction */
+		/* report detected policy violation to user */
+		/* note that esacalation is only done when flexible epoch
+		 * condition is violated
+		 */
+		print_policy_warning();
+	}
+
 	int rc = SBI_ENOTSUPP;
 	const char *msg = "trap handler failed";
 	ulong mcause = csr_read(CSR_MCAUSE);
@@ -93,6 +106,9 @@ void sbi_trap_handler_keystone_enclave(struct sbi_trap_regs *regs)
 		mtinst = csr_read(CSR_MTINST);
 	}
 
+	// record every trap that the enclave sees in here
+	//sbi_printf("[sm trap handler]trap infos \r\n\t %-20s %20lu \r\n\t %-20s %20lu \r\n\t %-20s %20lu \r\n", "Trap cause:", mcause, "Trap info:", mtval, "Trap instr:", mtinst);
+	
 	if (mcause & (1UL << (__riscv_xlen - 1))) {
 		mcause &= ~(1UL << (__riscv_xlen - 1));
 		switch (mcause) {
@@ -145,6 +161,13 @@ void sbi_trap_handler_keystone_enclave(struct sbi_trap_regs *regs)
 		rc = sbi_trap_redirect(regs, &trap);
 		break;
 	};
+
+	/* todo: check if there are no edge cases with redirected traps
+	 * todo: check if this should just be under s/m call or in general for all traps?
+	 * in general we want to update the last seen cycle count here
+	 * since the enclave might continue (i.e. it was not stopped)
+	 */
+	set_measurement();
 
 trap_error:
 	if (rc)

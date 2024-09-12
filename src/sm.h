@@ -63,6 +63,8 @@
 #define SBI_ERR_SM_PMP_REGION_OVERLAP                  100025
 #define SBI_ERR_SM_PMP_REGION_IMPOSSIBLE_TOR           100026
 
+extern uint64_t remaining_budget;
+
 void sm_init(bool cold_boot);
 
 /* platform specific functions */
@@ -105,9 +107,13 @@ struct keystone_sbi_create
   uintptr_t runtime_paddr;
   uintptr_t user_paddr;
   uintptr_t free_paddr;
+  
+  /* define optional policy */
+  uintptr_t cycles_per_epoch;
 
   struct runtime_va_params_t params;
-  unsigned int* eid_pptr;
+  //unsigned int* eid_pptr;
+
 };
 
 int osm_pmp_set(uint8_t perm);

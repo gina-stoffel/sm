@@ -16,8 +16,10 @@ unsigned long sbi_sm_create_enclave(unsigned long* eid, uintptr_t create_args)
 {
   struct keystone_sbi_create create_args_local;
   unsigned long ret;
+  //sbi_printf("[sm]the following argumetns are passed to create: %lu\n", create_args);
 
   ret = copy_enclave_create_args(create_args, &create_args_local);
+  //sbi_printf("[sm]the following argumetns marshaled into creating args %lu\n", create_args_local.cycles_per_epoch);
 
   if (ret)
     return ret;

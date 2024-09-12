@@ -73,6 +73,15 @@ static void test_is_create_args_valid()
 
 static void test_context_switch_to_enclave()
 {
+  struct sbi_trap_regs* regs;
+  enclave_id eid = 0;
+  int load_parameters = 0; // 0 =^= False
+
+  enclave_init_metadata();
+
+  //context_switch_to_enclave(regs, eid, load_parameters);
+
+  printf("Enclave policy instr count: %lu\n", enclave_policies[eid].instr_count);
 
 }
 
