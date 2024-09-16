@@ -64,6 +64,7 @@
 #define SBI_ERR_SM_PMP_REGION_IMPOSSIBLE_TOR           100026
 
 void sm_init(bool cold_boot);
+extern uint64_t remaining_budget;
 
 /* platform specific functions */
 #define ATTESTATION_KEY_LENGTH  64
@@ -107,7 +108,10 @@ struct keystone_sbi_create
   uintptr_t free_paddr;
 
   struct runtime_va_params_t params;
-  unsigned int* eid_pptr;
+
+  /* define optional policy */
+  uintptr_t cycles_per_epoch;
+  uintptr_t yields_per_epoch;
 };
 
 int osm_pmp_set(uint8_t perm);
